@@ -14,14 +14,12 @@ import java.util.Date;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.json.simple.JSONObject;
-import org.rmj.appdriver.constants.GCardStatus;
-import org.rmj.appdriver.GCrypt;
 import org.rmj.appdriver.GRider;
 import org.rmj.appdriver.iface.GEntity;
 import org.rmj.appdriver.iface.GTransaction;
 import org.rmj.appdriver.MiscUtil;
 import org.rmj.appdriver.SQLUtil;
-import org.rmj.integsys.pojo.UnitGCard;
+import org.rmj.gcard.service.GCRestAPI;
 import org.rmj.integsys.pojo.UnitGCardDetail;
 
 /**
@@ -42,194 +40,303 @@ public class GCOnPoints implements GTransaction {
         return loOcc;
     }
 
-    public Object loadTransaction(String fsTransNox) {
-       UnitGCardDetail loOcc = new UnitGCardDetail();
-       Connection loCon = poGRider.getConnection();
+public Object loadTransaction(String fsTransNox) {
+    UnitGCardDetail loOcc = new UnitGCardDetail();
+    Connection loCon = poGRider.getConnection();
 
-       //retrieve the record
-       StringBuilder lsSQL = new StringBuilder();
-       lsSQL.append(getSQ_Master());
-       lsSQL.append(" WHERE sTransNox = " + SQLUtil.toSQL(fsTransNox));
+    //retrieve the record
+    StringBuilder lsSQL = new StringBuilder();
+    lsSQL.append(getSQ_Master());
+    lsSQL.append(" WHERE sTransNox = " + SQLUtil.toSQL(fsTransNox));
 
-       Statement loStmt = null;
-       ResultSet loRS = null;
-       try {
-          loStmt = loCon.createStatement();
-          loRS = loStmt.executeQuery(lsSQL.toString());
+    Statement loStmt = null;
+    ResultSet loRS = null;
+    try {
+       loStmt = loCon.createStatement();
+       loRS = loStmt.executeQuery(lsSQL.toString());
 
-          if(!loRS.next())
-              setMessage("No Record Found!");
-          else{
-             //load each column to the entity
-             for(int lnCol=1; lnCol<=loRS.getMetaData().getColumnCount(); lnCol++){
-                 loOcc.setValue(lnCol, loRS.getObject(lnCol));
-             }
+       if(!loRS.next())
+           setMessage("No Record Found!");
+       else{
+          //load each column to the entity
+          for(int lnCol=1; lnCol<=loRS.getMetaData().getColumnCount(); lnCol++){
+              loOcc.setValue(lnCol, loRS.getObject(lnCol));
           }
-       } catch (SQLException ex) {
-          Logger.getLogger(GCApplication.class.getName()).log(Level.SEVERE, null, ex);
-          setErrMsg(ex.getMessage());
        }
-       finally{
-          MiscUtil.close(loRS);
-          MiscUtil.close(loStmt);
-          if(!pbWithParnt)
-             MiscUtil.close(loCon);
-       }
-
-       return loOcc;
+    } catch (SQLException ex) {
+       Logger.getLogger(GCApplication.class.getName()).log(Level.SEVERE, null, ex);
+       setErrMsg(ex.getMessage());
+    }
+    finally{
+       MiscUtil.close(loRS);
+       MiscUtil.close(loStmt);
+       if(!pbWithParnt)
+          MiscUtil.close(loCon);
     }
 
-    //make sure that chip will be updated in this area
-    public Object saveUpdate(Object foEntity, String fsTransNox) {
-        psLastNoxx = "";
+    return loOcc;
+ }
 
-        String lsSQL = "";
-        UnitGCardDetail loOldEnt = null;
-        UnitGCardDetail loNewEnt = null;
-        UnitGCardDetail loResult = null;
+//make sure that chip will be updated in this area
+public Object saveUpdate(Object foEntity, String fsTransNox){
+    psLastNoxx = "";
 
-       // Check for the value of foEntity
-       if (!(foEntity instanceof UnitGCardDetail)) {
-           setErrMsg("Invalid Entity Passed as Parameter");
-           return loResult;
-       }
+    String lsSQL = "";
+    UnitGCardDetail loOldEnt = null;
+    UnitGCardDetail loNewEnt = null;
+    UnitGCardDetail loResult = null;
 
-       // Typecast the Entity to this object
-       loNewEnt = (UnitGCardDetail) foEntity;
+    // Check for the value of foEntity
+    if (!(foEntity instanceof UnitGCardDetail)) {
+        setErrMsg("Invalid Entity Passed as Parameter");
+        return loResult;
+    }
 
-       if(loNewEnt.getGCardNo() == null || loNewEnt.getGCardNo().isEmpty()){
-           setErrMsg("No Card detected!");
-           return loResult;
-       }
+    // Typecast the Entity to this object
+    loNewEnt = (UnitGCardDetail) foEntity;
 
-       if(loNewEnt.getTransactDate() == null){
-           setErrMsg("Invalid transaction date detected!");
-           return loResult;
-       }
+    if(loNewEnt.getGCardNo() == null || loNewEnt.getGCardNo().isEmpty()){
+        setErrMsg("No Card detected!");
+        return loResult;
+    }
 
-       if(loNewEnt.getPoints() == null || loNewEnt.getPoints() == 0) {
-           setErrMsg("Invalid transaction points detected! This record maybe encoded previously on ONLINE/OFFLINE entry.");
-           return loResult;
-       }
+    if(loNewEnt.getTransactDate() == null){
+        setErrMsg("Invalid transaction date detected!");
+        return loResult;
+    }
 
-       if(loNewEnt.getSourceCd() == null || loNewEnt.getSourceCd().isEmpty()) {
-           setErrMsg("Invalid transaction code detected!");
-           return loResult;
-       }
+    if(loNewEnt.getPoints() == null || loNewEnt.getPoints() == 0) {
+        setErrMsg("Invalid transaction points detected! This record maybe encoded previously on ONLINE/OFFLINE entry.");
+        return loResult;
+    }
 
-       if(loNewEnt.getSourceNo() == null || loNewEnt.getSourceNo().isEmpty()) {
-           setErrMsg("Invalid Source Document Number Detected");
-           return loResult;
-       }
+    if(loNewEnt.getSourceCd() == null || loNewEnt.getSourceCd().isEmpty()) {
+        setErrMsg("Invalid transaction code detected!");
+        return loResult;
+    }
 
-       loNewEnt.setModifiedBy(psUserIDxx);
-       loNewEnt.setDateModified(poGRider.getServerDate());
+    if(loNewEnt.getSourceNo() == null || loNewEnt.getSourceNo().isEmpty()) {
+        setErrMsg("Invalid Source Document Number Detected");
+        return loResult;
+    }
 
-       //Generate the SQL Statement
-       if (fsTransNox.equals("")) {
-          //Generate the INSERT statement
-          Connection loCon = poGRider.getConnection();
+    loNewEnt.setModifiedBy(psUserIDxx);
+    loNewEnt.setDateModified(poGRider.getServerDate());
 
-          loNewEnt.setValue(1, MiscUtil.getNextCode(loNewEnt.getTable(), "sTransNox", true, loCon, psBranchCD));
+    //Generate the SQL Statement
+    if (fsTransNox.equals("")) {
+        //Generate the INSERT statement
+        Connection loCon = poGRider.getConnection();
 
-          lsSQL = MiscUtil.makeSQL((GEntity)loNewEnt);
-       } else {
-           return null;
-       }
+        loNewEnt.setValue(1, MiscUtil.getNextCode(loNewEnt.getTable(), "sTransNox", true, loCon, psBranchCD));
 
-       //No changes has been made
-       if (lsSQL.equals("")) {
-           setMessage("Record is not updated!");
-           return loResult;
-       }
+        lsSQL = MiscUtil.makeSQL((GEntity)loNewEnt);
+    } else {
+        return null;
+    }
 
-       if(!pbWithParnt)
-          poGRider.beginTrans();
+    //No changes has been made
+    if (lsSQL.equals("")) {
+        setMessage("Record is not updated!");
+        return loResult;
+    }
 
-       if(poGRider.executeQuery(lsSQL.toString(), loNewEnt.getTable(), "", "") == 0){
-          if(!poGRider.getErrMsg().isEmpty())
-             setErrMsg(poGRider.getErrMsg());
-          else
-             setMessage("No record updated");
-       }
-       else
-          loResult = loNewEnt;
+    if(!pbWithParnt)
+        poGRider.beginTrans();
 
+    if (poGRider.executeUpdate(lsSQL) == 0){
+        if(!poGRider.getErrMsg().isEmpty())
+            setErrMsg(poGRider.getErrMsg());
+        else
+            setMessage("No record updated");
+    } else loResult = loNewEnt;
+                
+//mac 2024.02.26
+//  comment out this block of code for implementation of TDS
+//  used code above to execute the saving on G_Card_Detail on local data only(no replication)
+//        if(poGRider.executeQuery(lsSQL, loNewEnt.getTable(), "", "") == 0){
+//            if(!poGRider.getErrMsg().isEmpty())
+//                setErrMsg(poGRider.getErrMsg());
+//            else
+//                setMessage("No record updated");
+//        } else loResult = loNewEnt;
+//       
+//        if(loResult != null){
+//            if(poJson != null){
+//                lsSQL = "INSERT INTO G_Card_Detail_Digital SET" +
+//                            "  sTransNox = " + SQLUtil.toSQL(loResult.getTransNo()) +
+//                            ", sIMEINoxx = " + SQLUtil.toSQL((String)poJson.get("sIMEINoxx")) +
+//                            ", sUserIDxx = " + SQLUtil.toSQL((String)poJson.get("sUserIDxx")) +
+//                            ", sMobileNo = " + SQLUtil.toSQL((String)poJson.get("sMobileNo")) +
+//                            ", dQRDateTm = " + SQLUtil.toSQL((String)poJson.get("dQRDateTm"));
+//                if(poGRider.executeQuery(lsSQL, "G_Card_Detail_Digital", "", "") == 0){
+//                    if(!poGRider.getErrMsg().isEmpty())
+//                        setErrMsg(poGRider.getErrMsg());
+//                    else
+//                        setMessage("Digital info was not saved");
+//                    loResult = null;
+//                }
+//            }
+//        }
        
-        if(loResult != null){
-            if(poJson != null){
-                lsSQL = "INSERT INTO G_Card_Detail_Digital" +
-                       " SET sTransNox = " + SQLUtil.toSQL(loResult.getTransNo()) +
-                          ", sIMEINoxx = " + SQLUtil.toSQL((String)poJson.get("sIMEINoxx")) +
-                          ", sUserIDxx = " + SQLUtil.toSQL((String)poJson.get("sUserIDxx")) +
-                          ", sMobileNo = " + SQLUtil.toSQL((String)poJson.get("sMobileNo")) +
-                          ", dQRDateTm = " + SQLUtil.toSQL((String)poJson.get("dQRDateTm"));
-                if(poGRider.executeQuery(lsSQL, "G_Card_Detail_Digital", "", "") == 0){
-                    if(!poGRider.getErrMsg().isEmpty())
-                       setErrMsg(poGRider.getErrMsg());
-                    else
-                       setMessage("Digital info was not saved");
-                    loResult = null;
-                }
+    if(!pbWithParnt){
+        if(getErrMsg().isEmpty()){
+            psLastNoxx = loResult.getTransNo();
+            poGRider.commitTrans();
+            
+            //mac 2024.02.26
+            //  save the TDS to the local database and upload to main server
+            try {
+                uploadTDS(loResult.getTransNo());
+            } catch (SQLException e) {
+                e.printStackTrace();
             }
+        } else
+            poGRider.rollbackTrans();
+    }
+
+    updateMaster(loResult.getGCardNo(), loResult.getPoints(), loResult.getTransNo());
+
+    return loResult;
+}
+
+public boolean uploadTDS(String fsTransNox) throws SQLException{
+    String lsSQL = "SELECT" +
+                        "  sTransNox" +
+                        ", sGCardNox" +
+                        ", sCompnyID" +
+                        ", dTransact" +
+                        ", sSourceNo" +
+                        ", sSourceCd" +
+                        ", nTranAmtx" +
+                        ", nPointsxx" +
+                        ", sOTPasswd" +
+                        ", cPointSnt" +
+                    " FROM G_Card_Detail" +
+                    " WHERE cPointSnt = '0'" +
+                        " AND sTransNox = " + SQLUtil.toSQL(fsTransNox);
+    
+    ResultSet loRS = poGRider.executeQuery(lsSQL);
+    
+    if (loRS.next()){        
+        String lsTDS = MiscUtil.getNextCode("G_Card_Digital_Transaction", "sTransNox", true, poGRider.getConnection(), psBranchCD);
+        
+        lsSQL = "INSERT INTO G_Card_Digital_Transaction SET" +
+                "  sTransNox = " + SQLUtil.toSQL(lsTDS) +
+                ", sGCardNox = " + SQLUtil.toSQL(loRS.getString("sGCardNox")) +
+                ", dTransact = " + SQLUtil.toSQL(loRS.getString("dTransact")) +
+                ", sBranchCd = " + SQLUtil.toSQL(psBranchCD) +
+                ", sSourceNo = " + SQLUtil.toSQL(loRS.getString("sSourceNo")) +
+                ", sSourceCd = " + SQLUtil.toSQL(loRS.getString("sSourceCd")) +
+                ", sOTPasswd = " + SQLUtil.toSQL(loRS.getString("sOTPasswd")) +
+                ", nTranAmtx = " + loRS.getDouble("nTranAmtx") +
+                ", nPointsxx = " + loRS.getDouble("nPointsxx") +
+                ", cSendStat = '0'" +
+                ", cTranStat = '0'" +
+                ", sEntryByx = " + SQLUtil.toSQL(poGRider.getUserID()) +
+                ", dEntryDte = " + SQLUtil.toSQL(poGRider.getServerDate());
+               
+        long lnRow = poGRider.executeUpdate(lsSQL);
+        
+        if (lnRow <= 0){
+            setMessage("Unable to create GCard Transaction Digital Signature.");
+            return false;
         }
-       
-        if(!pbWithParnt){
-            if(getErrMsg().isEmpty()){
-                psLastNoxx = loResult.getTransNo();
-                poGRider.commitTrans();
-            }
-            else
+        
+        JSONObject response = null;
+        
+        if (!psBranchCD.equals("M001")){
+            response = GCRestAPI.UploadTDS(poGRider, lsTDS);
+        } else {
+            response = new JSONObject();
+            response.put("result", "success");
+        }    
+        
+        poGRider.beginTrans();
+        
+        String result = (String) response.get("result");
+        if(result.equalsIgnoreCase("success")){               
+            String sql = "UPDATE G_Card_Detail" +
+                        " SET cPointSnt = '1'" + 
+                        " WHERE sTransNox = " + SQLUtil.toSQL(loRS.getString("sTransNox"));       
+
+            if (poGRider.executeQuery(sql, "G_Card_Detail", "", "") <= 0){
                 poGRider.rollbackTrans();
+                setMessage("Unable to update GCard Detail.");
+                return false;
+            }
+
+            sql = "UPDATE G_Card_Master" + 
+                    " SET sLastLine = " + SQLUtil.toSQL(loRS.getString("sTransNox")) + 
+                        ", sModified = " + SQLUtil.toSQL(poGRider.getUserID()) + 
+                        ", dModified = " + SQLUtil.toSQL(poGRider.getServerDate()) + 
+                    " WHERE sGCardNox = " + SQLUtil.toSQL(loRS.getString("sGCardNox"));
+
+            if (poGRider.executeQuery(sql, "G_Card_Master", "", "") <= 0){
+                poGRider.rollbackTrans();
+                setMessage("Unable to update GCard Master.");
+                return false;
+            }
+
+            sql = "UPDATE G_Card_Digital_Transaction" +
+                    " SET cSendStat = '1'" +
+                    " WHERE sTransNox = " + SQLUtil.toSQL(lsTDS);
+
+            if (poGRider.executeQuery(sql, "G_Card_Digital_Transaction", "", "") <= 0){
+                poGRider.rollbackTrans();
+                setMessage("Unable to update GCard TDS.");
+                return false; 
+            }
         }
-
-        updateMaster(loResult.getGCardNo(), loResult.getPoints(), loResult.getTransNo());
-       
-       return loResult;
+        
+        poGRider.commitTrans();
     }
+    
+    return true;
+}
 
-    public boolean deleteTransaction(String fsTransNox) {
-       UnitGCardDetail  loOcc = (UnitGCardDetail) loadTransaction(fsTransNox);
-       boolean lbResult = false;
+public boolean deleteTransaction(String fsTransNox) {
+   UnitGCardDetail  loOcc = (UnitGCardDetail) loadTransaction(fsTransNox);
+   boolean lbResult = false;
 
-       if(loOcc == null){
-          setMessage("No record found!");
-          return lbResult;
-       }
+   if(loOcc == null){
+      setMessage("No record found!");
+      return lbResult;
+   }
 
-       //TODO: Test the user rights in these area...
+   //TODO: Test the user rights in these area...
 
-       StringBuilder lsSQL = new StringBuilder();
-       lsSQL.append("DELETE FROM " + loOcc.getTable());
-       lsSQL.append(" WHERE sTransNox = " + SQLUtil.toSQL(fsTransNox));
+   StringBuilder lsSQL = new StringBuilder();
+   lsSQL.append("DELETE FROM " + loOcc.getTable());
+   lsSQL.append(" WHERE sTransNox = " + SQLUtil.toSQL(fsTransNox));
 
-       if(!pbWithParnt)
-          poGRider.beginTrans();
+   if(!pbWithParnt)
+      poGRider.beginTrans();
 
-       if(poGRider.executeQuery(lsSQL.toString(), loOcc.getTable(), "", "") == 0){
-          if(!poGRider.getErrMsg().isEmpty())
-             setErrMsg(poGRider.getErrMsg());
-          else
-             setMessage("No record deleted");
-       }
-       else
-          lbResult = true;
+   if(poGRider.executeQuery(lsSQL.toString(), loOcc.getTable(), "", "") == 0){
+      if(!poGRider.getErrMsg().isEmpty())
+         setErrMsg(poGRider.getErrMsg());
+      else
+         setMessage("No record deleted");
+   }
+   else
+      lbResult = true;
 
-       //TODO: Write the update to the GCard here
-       if(lbResult){
+   //TODO: Write the update to the GCard here
+   if(lbResult){
 
-       }
+   }
 
-       if(!pbWithParnt){
-          if(getErrMsg().isEmpty()){
-             poGRider.commitTrans();
-          }
-          else
-             poGRider.rollbackTrans();
-       }
+   if(!pbWithParnt){
+      if(getErrMsg().isEmpty()){
+         poGRider.commitTrans();
+      }
+      else
+         poGRider.rollbackTrans();
+   }
 
-       return lbResult;
-    }
+   return lbResult;
+}
 
     public boolean closeTransaction(String fsTransNox) {
        throw new UnsupportedOperationException("Not supported yet.");
