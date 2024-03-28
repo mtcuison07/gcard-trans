@@ -151,46 +151,18 @@ public Object saveUpdate(Object foEntity, String fsTransNox){
             setMessage("No record updated");
     } else loResult = loNewEnt;
                 
-//mac 2024.02.26
-//  comment out this block of code for implementation of TDS
-//  used code above to execute the saving on G_Card_Detail on local data only(no replication)
-//        if(poGRider.executeQuery(lsSQL, loNewEnt.getTable(), "", "") == 0){
-//            if(!poGRider.getErrMsg().isEmpty())
-//                setErrMsg(poGRider.getErrMsg());
-//            else
-//                setMessage("No record updated");
-//        } else loResult = loNewEnt;
-//       
-//        if(loResult != null){
-//            if(poJson != null){
-//                lsSQL = "INSERT INTO G_Card_Detail_Digital SET" +
-//                            "  sTransNox = " + SQLUtil.toSQL(loResult.getTransNo()) +
-//                            ", sIMEINoxx = " + SQLUtil.toSQL((String)poJson.get("sIMEINoxx")) +
-//                            ", sUserIDxx = " + SQLUtil.toSQL((String)poJson.get("sUserIDxx")) +
-//                            ", sMobileNo = " + SQLUtil.toSQL((String)poJson.get("sMobileNo")) +
-//                            ", dQRDateTm = " + SQLUtil.toSQL((String)poJson.get("dQRDateTm"));
-//                if(poGRider.executeQuery(lsSQL, "G_Card_Detail_Digital", "", "") == 0){
-//                    if(!poGRider.getErrMsg().isEmpty())
-//                        setErrMsg(poGRider.getErrMsg());
-//                    else
-//                        setMessage("Digital info was not saved");
-//                    loResult = null;
-//                }
-//            }
-//        }
-       
+    try {
+        uploadTDS(loResult.getTransNo());
+    } catch (SQLException e) {
+        e.printStackTrace();
+        poGRider.rollbackTrans();
+        return loResult;
+    }
+    
     if(!pbWithParnt){
         if(getErrMsg().isEmpty()){
             psLastNoxx = loResult.getTransNo();
             poGRider.commitTrans();
-            
-            //mac 2024.02.26
-            //  save the TDS to the local database and upload to main server
-            try {
-                uploadTDS(loResult.getTransNo());
-            } catch (SQLException e) {
-                e.printStackTrace();
-            }
         } else
             poGRider.rollbackTrans();
     }
@@ -260,7 +232,7 @@ public boolean uploadTDS(String fsTransNox) throws SQLException{
                         " SET cPointSnt = '1'" + 
                         " WHERE sTransNox = " + SQLUtil.toSQL(loRS.getString("sTransNox"));       
 
-            if (poGRider.executeQuery(sql, "G_Card_Detail", "", "") <= 0){
+            if (poGRider.executeUpdate(sql) == 0){
                 poGRider.rollbackTrans();
                 setMessage("Unable to update GCard Detail.");
                 return false;
@@ -272,7 +244,7 @@ public boolean uploadTDS(String fsTransNox) throws SQLException{
                         ", dModified = " + SQLUtil.toSQL(poGRider.getServerDate()) + 
                     " WHERE sGCardNox = " + SQLUtil.toSQL(loRS.getString("sGCardNox"));
 
-            if (poGRider.executeQuery(sql, "G_Card_Master", "", "") <= 0){
+            if (poGRider.executeUpdate(sql) == 0){
                 poGRider.rollbackTrans();
                 setMessage("Unable to update GCard Master.");
                 return false;
